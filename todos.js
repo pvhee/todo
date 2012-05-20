@@ -23,7 +23,6 @@ $(function(){
 
     // Ensure that each todo created has `title`.
     initialize: function() {
-      // console.log("Todo model initialized with title: " + this.get("title"));
       if (!this.get("title")) {
         this.set({"title": this.defaults().title});
       }
@@ -61,7 +60,7 @@ $(function(){
     model: Todo,
 
     // Save all of the todo items under the `"todos"` namespace.
-    localStorage: new Store("todos-backbone"),
+    // localStorage: new Store("todos-backbone"),
 
     // Filter down the list of all todo items that are finished.
     // this.filter is by backbone.js adapted to this collection. We pass in a function
@@ -84,7 +83,6 @@ $(function(){
     // We keep the Todos in sequential order, despite being saved by unordered
     // GUID in the database. This generates the next order number for new items.
     nextOrder: function() {
-      // console.log(this);
       if (!this.length) return 1;
       return this.last().get('order') + 1;
     },
@@ -268,6 +266,118 @@ $(function(){
     }
 
   });
+  
+  
+  // Override backbone's syncing method to provide interaction with a back-end
+  // via http://developer.teradata.com/blog/jasonstrimpel/2011/11/backbone-js-and-socket-io
+  // -------------------------------------------------------------------------
+  
+  Backbone.sync = function (method, model, options) {
+    // console.log('we are syncing!');
+    console.log(method);
+    // console.log(model);
+    // console.log(options);
+    
+    
+      var socket = window.socket; // grab active socket from global namespace; io.connect() was used to create socket
+      // console.log(window.socket);
+      
+
+      /*
+       * Create signature object that will emitted to server with every request. 
+       * This is used on the server to push an event back to the client listener.
+       */
+      var signature = function () {
+          var sig = {};    
+
+          sig.endPoint = model.url + (model.id ? ('/' + model.id) : '');
+          if (model.ctx) sig.ctx = model.ctx;
+
+          return sig;
+      };
+
+      /*
+       * Create an event listener for server push. The server notifies
+       * the client upon success of CRUD operation.
+       */
+      var event = function (operation, sig) {
+          var e = operation + ':'; 
+          e += sig.endPoint;
+          if (sig.ctx) e += (':' + sig.ctx);
+
+          return e;
+      };
+
+      // Save a new model to the server.
+      var create = function () {  
+          var sign = signature(model); 
+          var e = event('create', sign);
+          
+          console.log(model.attributes);
+          
+          socket.emit('create', {'signature' : sign, item : model.attributes }); 
+          socket.once(e, function (data) {
+              model.id = data.id;  
+              console.log(model);                     
+          });                           
+      };              
+
+      // Get a collection or model from the server.
+      var read = function () {
+        
+          var sign = signature(model);
+          
+          // console.log(model);
+          
+          
+          var e = event('read', sign);
+          socket.emit('read', {'signature' : sign});  
+          socket.once(e, function (data) {
+              options.success(data); // updates collection, model; fetch                      
+          });   
+          
+          
+          
+      }; 
+
+      // Save an existing model to the server.
+      var update = function () {
+          var sign = signature(model); 
+          var e = event('update', sign);
+          socket.emit('update', {'signature' : sign, item : model.attributes }); // model.attribues is the model data
+          socket.once(e, function (data) { 
+              console.log(data);                     
+          });                           
+      };  
+
+      // Delete a model on the server.
+      var destroy = function () {
+          var sign = signature(model); 
+          var e = event('delete', sign);
+          socket.emit('delete', {'signature' : sign, item : model.attributes }); // model.attribues is the model data
+          socket.once(e, function (data) { 
+              console.log(data);                     
+          });                           
+      };             
+
+      // entry point for method
+      switch (method) {
+          case 'create':
+              create();
+              break;        
+          case 'read':  
+              read(); 
+              break;  
+          case 'update':
+              update();
+              break;
+          case 'delete':
+              destroy();
+              break; 
+      }        
+  };
+  
+  
 
   // Finally, we kick things off by creating the **App**.
   var App = new AppView;
