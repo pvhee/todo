@@ -35,7 +35,10 @@ var event = function (operation, sig) {
     return e;
 };
 
-app.listen(3000);
+//js+css files
+app.get('/*.(js|css)', function(req, res){
+  res.sendfile("./"+req.url);
+});
 
 app.get('/', function (req, res) {
   res.sendfile(__dirname + '/index.html');
@@ -55,3 +58,6 @@ io.sockets.on('connection', function (socket) {
         destroy(socket, data.signature);       
     });    
 });
+
+// Listen on port 3000, connect via eg local:3000
+app.listen(3000);
